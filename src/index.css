@@ -1,0 +1,64 @@
+/* Global styles for SVIT Attendance Tracker */
+
+body {
+  background-color: #f8f9fa;
+  font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Status badge customizations */
+.badge {
+  font-weight: 500;
+}
+
+/* Seating grid styles */
+.seating-grid .card {
+  transition: all 0.2s ease-in-out;
+}
+
+.seating-grid .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+/* Override Bootstrap colors for accessibility */
+.bg-primary {
+  background-color: #0d6efd !important;
+}
+
+.bg-success {
+  background-color: #198754 !important;
+}
+
+.bg-danger {
+  background-color: #dc3545 !important;
+}
+
+.bg-warning {
+  background-color: #ffc107 !important;
+}
+
+/* Print styles */
+@media print {
+  body {
+    background-color: #fff;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  .container {
+    width: 100%;
+    max-width: 100%;
+  }
+}

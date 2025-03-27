@@ -1,0 +1,128 @@
+.exam-attendance-app {
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+
+.header-card {
+  background: linear-gradient(to right, #f1f5f9, #ffffff);
+  border-left: 5px solid #4e31aa !important;
+}
+
+.header-card h1 {
+  font-weight: 700;
+}
+
+.room-checkbox {
+  min-width: 150px;
+  background-color: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-right: 10px;
+  transition: all 0.2s;
+}
+
+.room-checkbox:hover {
+  background-color: #e9ecef;
+}
+
+.stats-card {
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s;
+}
+
+.stats-card:hover {
+  transform: translateY(-5px);
+}
+
+.stats-card h3 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.room-tabs .nav-link {
+  color: #495057;
+  border-radius: 0;
+  font-weight: 500;
+}
+
+.room-tabs .nav-link.active {
+  color: #4e31aa;
+  border-bottom: 3px solid #4e31aa;
+  background-color: transparent;
+}
+
+.hall-ticket {
+  background-color: #f8f9fa;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+}
+
+.status-buttons .btn {
+  min-width: 110px;
+  transition: all 0.2s;
+}
+
+.status-buttons .btn:hover {
+  transform: translateY(-2px);
+}
+
+.attendance-table th {
+  background-color: #4e31aa;
+  color: white;
+}
+
+/* Animation for success message */
+.alert-success {
+  animation: fadeInOut 3s ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #aaa;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #888;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .status-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .status-buttons .btn {
+    margin: 0 0 5px 0 !important;
+    width: 100%;
+  }
+  
+  .room-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
