@@ -384,9 +384,9 @@ function App() {
                     </Form.Text>
                   </Form.Group>
                 </Tab>
-                <Tab eventKey="pdf" title="PDF Upload">
+                {/* <Tab eventKey="pdf" title="PDF Upload">
                   <PDFUploader onExtractedHallTickets={handleExtractedHallTickets} />
-                </Tab>
+                </Tab> */}
               </Tabs>
               
               {loading && <Alert variant="info">Processing file, please wait...</Alert>}
