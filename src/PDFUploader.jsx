@@ -1,172 +1,174 @@
 import React, { useState } from 'react';
-import { Card, Form, Button, Alert, Container, Row, Col } from 'react-bootstrap';
-import { Document, Page, pdfjs } from 'react-pdf';
+import { Card, Form, Button, Alert, Spinner, ListGroup, Badge } from 'react-bootstrap';
+import * as pdfjs from 'pdfjs-dist';
 
-// Set the worker source for PDF.js
+// Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 const PDFUploader = ({ onExtractedHallTickets }) => {
-  const [pdfFile, setPdfFile] = useState(null);
-  const [numPages, setNumPages] = useState(null);
-  const [pageNumber, setPageNumber] = useState(1);
+  const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [extractedText, setExtractedText] = useState('');
-  const [hallTickets, setHallTickets] = useState([]);
+  const [progress, setProgress] = useState(0);
+  const [extractedHallTickets, setExtractedHallTickets] = useState([]);
 
-  const onDocumentLoadSuccess = ({ numPages }) => {
-    setNumPages(numPages);
-    setPageNumber(1);
-  };
-
+  // Handle file upload
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file && file.type === 'application/pdf') {
-      setPdfFile(file);
+    const uploadedFile = e.target.files[0];
+    if (uploadedFile && uploadedFile.type === 'application/pdf') {
+      setFile(uploadedFile);
       setError(null);
     } else {
-      setPdfFile(null);
+      setFile(null);
       setError('Please upload a valid PDF file.');
     }
   };
 
-  const extractTextFromPDF = async () => {
-    if (!pdfFile) {
-      setError('Please upload a PDF file first.');
+  // Process PDF to extract hall ticket numbers
+  const processFile = async () => {
+    if (!file) {
+      setError('Please select a PDF file first.');
       return;
     }
 
     setLoading(true);
+    setProgress(0);
     setError(null);
+    setExtractedHallTickets([]);
 
     try {
-      const pdf = await pdfjs.getDocument(URL.createObjectURL(pdfFile)).promise;
-      let fullText = '';
-
-      // Extract text from each page
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const textItems = textContent.items.map(item => item.str).join(' ');
-        fullText += textItems + ' ';
-      }
-
-      setExtractedText(fullText);
-
-      // Extract hall ticket numbers (10 character alphanumeric)
-      const hallTicketRegex = /[A-Za-z0-9]{10}/g;
-      const matches = fullText.match(hallTicketRegex) || [];
-
-      // Filter for hall ticket pattern (usually starting with digits followed by alphanumeric)
-      const filteredMatches = matches.filter(match => /^\d{3}[A-Za-z0-9]{7}$/.test(match));
+      // Read the PDF file
+      const fileReader = new FileReader();
       
-      setHallTickets(filteredMatches);
-      
-      if (filteredMatches.length > 0) {
-        // Pass hall tickets to parent component
-        if (onExtractedHallTickets) {
-          onExtractedHallTickets(filteredMatches);
+      fileReader.onload = async (event) => {
+        try {
+          const typedArray = new Uint8Array(event.target.result);
+          
+          // Load the PDF document
+          const pdf = await pdfjs.getDocument({ data: typedArray }).promise;
+          const numPages = pdf.numPages;
+          
+          // Initialize hall tickets array
+          const hallTickets = new Set();
+          
+          // Process each page
+          for (let i = 1; i <= numPages; i++) {
+            // Update progress
+            setProgress(Math.floor((i / numPages) * 100));
+            
+            // Get the page
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const textItems = textContent.items;
+            
+            // Extract text from the page
+            const pageText = textItems.map(item => item.str).join(' ');
+            
+            // Extract hall ticket numbers (10-character alphanumeric strings)
+            // Using regex to find patterns that look like hall ticket numbers
+            const hallTicketRegex = /\b[A-Z0-9]{10}\b/g;
+            const matches = pageText.match(hallTicketRegex) || [];
+            
+            // Add to our set (to avoid duplicates)
+            matches.forEach(match => hallTickets.add(match));
+          }
+          
+          // Convert set to array and update state
+          const hallTicketArray = Array.from(hallTickets);
+          setExtractedHallTickets(hallTicketArray);
+          
+          // Call the parent component's callback with the hall tickets
+          if (hallTicketArray.length > 0) {
+            onExtractedHallTickets(hallTicketArray);
+          } else {
+            setError('No hall ticket numbers found in the PDF. Hall tickets should be 10-character alphanumeric strings.');
+          }
+          
+          setLoading(false);
+        } catch (err) {
+          console.error('Error processing PDF:', err);
+          setError(`Error processing PDF: ${err.message}`);
+          setLoading(false);
         }
-      } else {
-        setError('No hall ticket numbers found in the PDF.');
-      }
+      };
+      
+      fileReader.onerror = () => {
+        setError('Error reading the file. Please try again.');
+        setLoading(false);
+      };
+      
+      fileReader.readAsArrayBuffer(file);
     } catch (err) {
-      console.error('Error extracting text from PDF:', err);
-      setError('Failed to extract text from the PDF. Please try again.');
-    } finally {
+      console.error('Error in PDF processing:', err);
+      setError(`Error: ${err.message}`);
       setLoading(false);
     }
   };
 
   return (
-    <Card className="shadow-sm border-0 mb-4">
+    <Card className="border-0 shadow-sm mb-4">
       <Card.Body>
-        <h5 className="card-title mb-3">Extract Hall Tickets from PDF</h5>
+        <h5 className="mb-3">Extract Hall Tickets from PDF</h5>
         
-        <Form.Group className="mb-3">
+        <Form.Group controlId="pdfFile" className="mb-3">
           <Form.Label>Upload PDF File</Form.Label>
           <Form.Control 
             type="file" 
             accept=".pdf" 
             onChange={handleFileChange}
-            className="mb-3"
+            disabled={loading}
           />
           <Form.Text className="text-muted">
-            Upload a PDF file containing hall ticket numbers to extract.
+            Upload a PDF file containing hall ticket numbers. The system will scan for 10-character alphanumeric strings.
           </Form.Text>
         </Form.Group>
         
-        <Button 
-          variant="primary" 
-          onClick={extractTextFromPDF} 
-          disabled={!pdfFile || loading}
-          className="mb-3"
-        >
-          {loading ? 'Extracting...' : 'Extract Hall Tickets'}
-        </Button>
-        
-        {error && <Alert variant="danger" className="mt-3">{error}</Alert>}
-        
-        {hallTickets.length > 0 && (
-          <div className="mt-4">
-            <Alert variant="success">
-              Successfully extracted {hallTickets.length} hall ticket numbers.
-            </Alert>
-            
-            <h6 className="mt-3">Extracted Hall Tickets:</h6>
-            <div className="hall-tickets-container border p-3 rounded bg-light">
-              {hallTickets.map((ticket, index) => (
-                <Badge 
-                  key={index} 
-                  bg="primary" 
-                  className="m-1 p-2"
-                >
-                  {ticket}
-                </Badge>
-              ))}
-            </div>
-          </div>
+        {error && (
+          <Alert variant="danger" className="mb-3">
+            {error}
+          </Alert>
         )}
         
-        {pdfFile && (
-          <div className="pdf-preview mt-4">
-            <h6>PDF Preview:</h6>
-            <div className="pdf-document-container border rounded">
-              <Document
-                file={URL.createObjectURL(pdfFile)}
-                onLoadSuccess={onDocumentLoadSuccess}
-                className="pdf-document"
-              >
-                <Page 
-                  pageNumber={pageNumber} 
-                  width={300}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                />
-              </Document>
-              
-              <div className="text-center mt-2">
-                <p>
-                  Page {pageNumber} of {numPages}
-                </p>
-                <div className="d-flex justify-content-center">
-                  <Button 
-                    size="sm" 
-                    onClick={() => setPageNumber(pageNumber - 1)}
-                    disabled={pageNumber <= 1}
-                    className="me-2"
-                  >
-                    Previous
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    onClick={() => setPageNumber(pageNumber + 1)}
-                    disabled={pageNumber >= numPages}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
+        {loading ? (
+          <div className="mb-3">
+            <div className="d-flex align-items-center mb-2">
+              <Spinner animation="border" size="sm" className="me-2" />
+              <span>Processing PDF... {progress}%</span>
+            </div>
+            <div className="progress">
+              <div 
+                className="progress-bar progress-bar-striped progress-bar-animated" 
+                role="progressbar" 
+                style={{ width: `${progress}%` }} 
+                aria-valuenow={progress} 
+                aria-valuemin="0" 
+                aria-valuemax="100"
+              ></div>
+            </div>
+          </div>
+        ) : (
+          <Button 
+            variant="primary" 
+            onClick={processFile} 
+            disabled={!file || loading}
+            className="mb-3"
+          >
+            Extract Hall Tickets
+          </Button>
+        )}
+        
+        {extractedHallTickets.length > 0 && (
+          <div>
+            <h6>Extracted Hall Tickets <Badge bg="success">{extractedHallTickets.length}</Badge></h6>
+            <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+              <ListGroup>
+                {extractedHallTickets.map((ticket, index) => (
+                  <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
+                    <code>{ticket}</code>
+                    <small className="text-muted">Branch Code: {ticket.slice(6, 8)}</small>
+                  </ListGroup.Item>
+                ))}
+              </ListGroup>
             </div>
           </div>
         )}

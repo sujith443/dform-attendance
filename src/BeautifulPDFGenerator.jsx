@@ -2,8 +2,75 @@ import React from 'react';
 import { Button } from 'react-bootstrap';
 
 const BeautifulPDFGenerator = ({ attendanceData, selectedRooms, stats }) => {
+  // Helper function to extract branch code from hall ticket number
+  const extractBranchCode = (hallTicket) => {
+    // Extract branch code using slice(6,8) as specified
+    if (hallTicket && typeof hallTicket === 'string' && hallTicket.length >= 8) {
+      return hallTicket.slice(6, 8);
+    }
+    return "00"; // Default if pattern not found
+  };
+
+  // Helper function to get branch name from branch code
+  const getBranchName = (branchCode) => {
+    const branchNames = {
+      "01": "Civil Engineering",
+      "02": "Electrical & Electronics Engineering",
+      "03": "Mechanical Engineering",
+      "04": "Electronics & Communication",
+      "05": "Computer Science",
+      "12": "Information Technology",
+      "42": "Artificial Intelligence",
+      "66": "Data Science"
+    };
+    
+    return branchNames[branchCode] || `Branch ${branchCode}`;
+  };
+
+  // Get lighter version of a color for backgrounds
+  const getLighterColor = (color) => {
+    // Mix with white to create a lighter version (80% white, 20% original)
+    return [
+      Math.min(255, Math.round(color[0] * 0.2 + 255 * 0.8)),
+      Math.min(255, Math.round(color[1] * 0.2 + 255 * 0.8)),
+      Math.min(255, Math.round(color[2] * 0.2 + 255 * 0.8))
+    ];
+  };
+
+  // Get branch color for visual distinction
+  const getBranchColor = (branchCode) => {
+    const branchColors = {
+      "01": [100, 149, 237], // Civil - Cornflower Blue
+      "02": [255, 165, 0],   // EEE - Orange
+      "03": [0, 128, 128],   // Mechanical - Teal
+      "04": [106, 90, 205],  // ECE - Slate Blue
+      "05": [60, 179, 113],  // CSE - Medium Sea Green
+      "12": [220, 20, 60],   // IT - Crimson
+      "42": [75, 0, 130],    // AI - Indigo
+      "66": [139, 69, 19]    // DS - Saddle Brown
+    };
+    
+    return branchColors[branchCode] || [128, 128, 128]; // Default gray
+  };
+
+  // Log branch information for debugging
+  const logBranchInfo = (attendanceData) => {
+    // Loop through each room
+    for (const [room, students] of Object.entries(attendanceData)) {
+      console.log(`Seating arrangement for ${room}:`);
+      // Loop through students in the room
+      for (const [hallTicket, status] of Object.entries(students)) {
+        const branchCode = hallTicket.slice(6, 8);
+        console.log(`  ${hallTicket}: Branch ${branchCode} - ${getBranchName(branchCode)}, Status: ${status}`);
+      }
+    }
+  };
+
   const generatePDF = async () => {
     try {
+      // Log branch info for debugging
+      logBranchInfo(attendanceData);
+
       // Import jsPDF dynamically
       const jsPDFModule = await import('jspdf');
       const jsPDF = jsPDFModule.jsPDF;
@@ -205,174 +272,304 @@ const BeautifulPDFGenerator = ({ attendanceData, selectedRooms, stats }) => {
       
       y += 25;
       
-      // Process each room
-      selectedRooms.forEach((room, roomIndex) => {
-        // Check if need new page
-        checkPageOverflow(60);
-        
-        // Add room header with decorative background
-        doc.setFillColor(245, 245, 255);
-        doc.roundedRect(margin, y, pageWidth - 2 * margin, 20, 2, 2, 'F');
-        
-        // Add room name
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(78, 49, 170);
-        doc.text(`Room: ${room}`, margin + 10, y + 13);
-        
-        // Add count indicators
+      // Collect all students by branch (across all rooms)
+      const allBranchStudents = {};
+      
+      // Process all rooms and organize students by branch
+      selectedRooms.forEach(room => {
         const roomData = attendanceData[room] || {};
-        const presentCount = Object.values(roomData).filter(status => status === 'present').length;
-        const absentCount = Object.values(roomData).filter(status => status === 'absent').length;
-        const malpracticeCount = Object.values(roomData).filter(status => status === 'malpractice').length;
-        
-        const countText = `Total: ${Object.keys(roomData).length} | Present: ${presentCount} | Absent: ${absentCount} | Malpractice: ${malpracticeCount}`;
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 100, 100);
-        doc.text(countText, pageWidth - margin - 10, y + 13, { align: 'right' });
-        
-        y += 30;
-        
-        // Prepare data for sections
-        const presentStudents = [];
-        const absentStudents = [];
-        const malpracticeStudents = [];
         
         Object.entries(roomData).forEach(([hallTicket, status]) => {
+          const branchCode = extractBranchCode(hallTicket);
+          
+          // Initialize branch if not exists
+          if (!allBranchStudents[branchCode]) {
+            allBranchStudents[branchCode] = {
+              present: [],
+              absent: [],
+              malpractice: []
+            };
+          }
+          
+          // Add student to appropriate status list
           if (status === 'present') {
-            presentStudents.push(hallTicket);
+            allBranchStudents[branchCode].present.push(hallTicket);
           } else if (status === 'absent') {
-            absentStudents.push(hallTicket);
+            allBranchStudents[branchCode].absent.push(hallTicket);
           } else if (status === 'malpractice') {
-            malpracticeStudents.push(hallTicket);
+            allBranchStudents[branchCode].malpractice.push(hallTicket);
           }
         });
+      });
+      
+      // Add branch summary section
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(78, 49, 170);
+      doc.text('BRANCH DISTRIBUTION', pageWidth / 2, y, { align: 'center' });
+      
+      y += 15;
+      
+      // Calculate branch statistics
+      const branchStats = {};
+      Object.entries(allBranchStudents).forEach(([branchCode, students]) => {
+        const present = students.present.length;
+        const absent = students.absent.length;
+        const malpractice = students.malpractice.length;
+        const total = present + absent + malpractice;
         
-        // Start with most relevant sections (based on count)
-        const sections = [
-          {
-            title: 'PRESENT STUDENTS',
-            students: presentStudents,
-            fillColor: [230, 255, 230],
-            borderColor: [46, 184, 46],
-            textColor: [0, 100, 0]
-          },
-          {
-            title: 'ABSENT STUDENTS',
-            students: absentStudents,
-            fillColor: [255, 235, 235],
-            borderColor: [220, 53, 69],
-            textColor: [150, 0, 0]
-          },
-          {
-            title: 'MALPRACTICE STUDENTS',
-            students: malpracticeStudents,
-            fillColor: [255, 245, 225],
-            borderColor: [255, 153, 0],
-            textColor: [150, 80, 0]
-          }
-        ];
-        
-        // Sort sections by student count (descending)
-        sections.sort((a, b) => b.students.length - a.students.length);
-        
-        // Check if we need a new page before starting
-        const maxStudents = Math.max(
-          presentStudents.length,
-          absentStudents.length,
-          malpracticeStudents.length
-        );
-        
-        // Estimate space needed
-        const estimatedHeight = Math.min(maxStudents, 10) * 6 + 30; // 30 for headers, 6 per student
-        checkPageOverflow(estimatedHeight);
-        
-        // Draw attendance sections
-        sections.forEach(section => {
-          if (section.students.length === 0) return;
-          
-          // Check if we need a new page
-          checkPageOverflow(Math.min(section.students.length, 10) * 6 + 25);
-          
-          // Add section header
-          doc.setFillColor(section.fillColor[0], section.fillColor[1], section.fillColor[2]);
-          doc.setDrawColor(section.borderColor[0], section.borderColor[1], section.borderColor[2]);
-          doc.roundedRect(margin, y, pageWidth - 2 * margin, 18, 2, 2, 'FD');
-          
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(11);
-          doc.setTextColor(section.textColor[0], section.textColor[1], section.textColor[2]);
-          doc.text(`${section.title} (${section.students.length})`, margin + 10, y + 12);
-          
-          y += 25;
-          
-          // Draw student list in columns
-          const studentsPerColumn = Math.ceil(section.students.length / 3);
-          const colWidth = (pageWidth - 2 * margin) / 3;
-          
-          let currentY = y;
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(9);
-          doc.setTextColor(60, 60, 60);
-          
-          section.students.forEach((hallTicket, index) => {
-            const column = Math.floor(index / studentsPerColumn);
-            const xPos = margin + 5 + column * colWidth;
-            const yPos = currentY + (index % studentsPerColumn) * 6;
-            
-            // Check if we need to start a new page for this entry
-            if (yPos > pageHeight - margin && index > 0) {
-              doc.addPage();
-              // Reset positioning for the new page
-              currentY = 20;
-              
-              // Add continuation header
-              doc.setFillColor(section.fillColor[0], section.fillColor[1], section.fillColor[2]);
-              doc.setDrawColor(section.borderColor[0], section.borderColor[1], section.borderColor[2]);
-              doc.roundedRect(margin, currentY, pageWidth - 2 * margin, 18, 2, 2, 'FD');
-              
-              doc.setFont('helvetica', 'bold');
-              doc.setFontSize(11);
-              doc.setTextColor(section.textColor[0], section.textColor[1], section.textColor[2]);
-              doc.text(`${section.title} (continued)`, margin + 10, currentY + 12);
-              
-              currentY += 25;
-              
-              // Recalculate position for this entry
-              const newColumn = Math.floor(index / studentsPerColumn);
-              const newXPos = margin + 5 + newColumn * colWidth;
-              const newYPos = currentY + (index % studentsPerColumn) * 6;
-              
-              doc.setFont('helvetica', 'normal');
-              doc.setFontSize(9);
-              doc.setTextColor(60, 60, 60);
-              doc.text(`•  ${hallTicket}`, newXPos, newYPos);
-            } else {
-              doc.text(`•  ${hallTicket}`, xPos, yPos);
-            }
-          });
-          
-          // Calculate next Y position based on the most entries in a column
-          const columnsNeeded = Math.min(3, Math.ceil(section.students.length / studentsPerColumn));
-          const entriesInLastColumn = section.students.length - (columnsNeeded - 1) * studentsPerColumn;
-          const rowsInLastColumn = entriesInLastColumn > 0 ? entriesInLastColumn : studentsPerColumn;
-          
-          y = currentY + rowsInLastColumn * 6 + 15;
-        });
-        
-        // Add separator between rooms if not the last room
-        if (roomIndex < selectedRooms.length - 1) {
-          checkPageOverflow(25);
-          doc.setDrawColor(200, 200, 200);
-          doc.setLineDashPattern([3, 2], 0);
-          doc.line(margin + 20, y, pageWidth - margin - 20, y);
-          doc.setLineDashPattern([], 0);
-          y += 20;
+        if (total > 0) {
+          branchStats[branchCode] = { present, absent, malpractice, total };
         }
       });
       
-      // Add footer on each page with logo and page numbers
+      // Create branch statistics table
+      if (Object.keys(branchStats).length > 0) {
+        // Table header
+        const headerCells = ["Branch", "Total", "Present", "Absent", "Malpractice", "%"];
+        const colWidths = [70, 25, 25, 25, 25, 15];
+        
+        // Draw header
+        doc.setFillColor(78, 49, 170);
+        let xPos = margin;
+        headerCells.forEach((header, i) => {
+          doc.rect(xPos, y, colWidths[i], 10, 'F');
+          xPos += colWidths[i];
+        });
+        
+        // Draw header text
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(255, 255, 255);
+        
+        xPos = margin;
+        headerCells.forEach((header, i) => {
+          doc.text(header, xPos + colWidths[i]/2, y + 6, { align: 'center' });
+          xPos += colWidths[i];
+        });
+        
+        y += 10;
+        
+        // Draw data rows
+        Object.entries(branchStats)
+          .sort((a, b) => b[1].total - a[1].total) // Sort by total count
+          .forEach(([branchCode, data], rowIndex) => {
+            // Check if we need a new page
+            if (y + 10 > pageHeight - margin) {
+              doc.addPage();
+              y = 20;
+              
+              // Redraw header
+              doc.setFillColor(78, 49, 170);
+              let xPos = margin;
+              headerCells.forEach((header, i) => {
+                doc.rect(xPos, y, colWidths[i], 10, 'F');
+                xPos += colWidths[i];
+              });
+              
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(9);
+              doc.setTextColor(255, 255, 255);
+              
+              xPos = margin;
+              headerCells.forEach((header, i) => {
+                doc.text(header, xPos + colWidths[i]/2, y + 6, { align: 'center' });
+                xPos += colWidths[i];
+              });
+              
+              y += 10;
+            }
+            
+            // Alternate row colors
+            if (rowIndex % 2 === 0) {
+              doc.setFillColor(240, 240, 240);
+            } else {
+              doc.setFillColor(255, 255, 255);
+            }
+            
+            // Draw row background
+            xPos = margin;
+            let totalWidth = 0;
+            colWidths.forEach(width => {
+              totalWidth += width;
+            });
+            doc.rect(margin, y, totalWidth, 8, 'F');
+            
+            // Draw row data
+            const branchName = getBranchName(branchCode);
+            const percentage = Math.round((data.total / stats.totalStudents) * 100);
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(60, 60, 60);
+            
+            // Branch name
+            doc.text(`${branchName} (${branchCode})`, margin + 3, y + 5, { align: 'left' });
+            
+            // Statistics
+            xPos = margin + colWidths[0];
+            doc.text(data.total.toString(), xPos + colWidths[1]/2, y + 5, { align: 'center' });
+            xPos += colWidths[1];
+            
+            doc.text(data.present.toString(), xPos + colWidths[2]/2, y + 5, { align: 'center' });
+            xPos += colWidths[2];
+            
+            doc.text(data.absent.toString(), xPos + colWidths[3]/2, y + 5, { align: 'center' });
+            xPos += colWidths[3];
+            
+            doc.text(data.malpractice.toString(), xPos + colWidths[4]/2, y + 5, { align: 'center' });
+            xPos += colWidths[4];
+            
+            doc.text(`${percentage}%`, xPos + colWidths[5]/2, y + 5, { align: 'center' });
+            
+            y += 8;
+          });
+      }
+      
+      y += 10;
+      
+      // Create a new page for each branch
+      const branchCodes = Object.keys(allBranchStudents).sort(); // Sort by branch code
+      
+      branchCodes.forEach(branchCode => {
+        const branchData = allBranchStudents[branchCode];
+        const totalStudents = branchData.present.length + branchData.absent.length + branchData.malpractice.length;
+        
+        // Skip empty branches
+        if (totalStudents === 0) return;
+        
+        // Start a new page for each branch
+        doc.addPage();
+        y = 20;
+        
+        // Get branch info
+        const branchName = getBranchName(branchCode);
+        const branchColor = getBranchColor(branchCode);
+        const branchLightColor = getLighterColor(branchColor);
+        
+        // Add branch header
+        doc.setFillColor(branchLightColor[0], branchLightColor[1], branchLightColor[2]);
+        doc.roundedRect(margin, y, pageWidth - 2 * margin, 25, 3, 3, 'F');
+        
+        doc.setDrawColor(branchColor[0], branchColor[1], branchColor[2]);
+        doc.setLineWidth(1);
+        doc.roundedRect(margin, y, pageWidth - 2 * margin, 25, 3, 3, 'S');
+        
+        // Add branch name
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.setTextColor(branchColor[0], branchColor[1], branchColor[2]);
+        doc.text(`${branchName} (${branchCode})`, pageWidth / 2, y + 10, { align: 'center' });
+        
+        // Add stats
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(60, 60, 60);
+        doc.text(`Total: ${totalStudents} | Present: ${branchData.present.length} | Absent: ${branchData.absent.length} | Malpractice: ${branchData.malpractice.length}`, 
+          pageWidth / 2, y + 20, { align: 'center' });
+        
+        y += 35;
+        
+        // Show students by attendance status
+        const sections = [
+          { 
+            title: "PRESENT STUDENTS", 
+            students: branchData.present.sort(), 
+            color: [46, 184, 46],
+            textColor: [255, 255, 255],
+            fontStyle: 'normal'
+          },
+          { 
+            title: "ABSENT STUDENTS", 
+            students: branchData.absent.sort(), 
+            color: [220, 53, 69],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          },
+          { 
+            title: "MALPRACTICE STUDENTS", 
+            students: branchData.malpractice.sort(), 
+            color: [255, 153, 0],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          }
+        ];
+        
+        // Only display sections with students
+        sections.filter(section => section.students.length > 0).forEach(section => {
+          // Check if we need a new page
+          if (y + 30 > pageHeight - margin) {
+            doc.addPage();
+            y = 20;
+          }
+          
+          // Add section header
+          doc.setFillColor(section.color[0], section.color[1], section.color[2]);
+          doc.rect(margin, y, pageWidth - 2 * margin, 10, 'F');
+          
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.setTextColor(section.textColor[0], section.textColor[1], section.textColor[2]);
+          doc.text(`${section.title} (${section.students.length})`, margin + 10, y + 7);
+          
+          y += 15;
+          
+          // Create a grid for hall tickets
+          const gridColumns = 5;
+          const cellWidth = (pageWidth - 2 * margin) / gridColumns;
+          const cellHeight = 10;
+          
+          // Draw students in grid
+          let gridY = y;
+          section.students.forEach((hallTicket, index) => {
+            const row = Math.floor(index / gridColumns);
+            const col = index % gridColumns;
+            
+            // Check if we need a new page
+            if (gridY + (row * cellHeight) + cellHeight > pageHeight - margin) {
+              doc.addPage();
+              gridY = 20;
+              
+              // Add continuation header
+              doc.setFillColor(section.color[0], section.color[1], section.color[2]);
+              doc.rect(margin, gridY, pageWidth - 2 * margin, 10, 'F');
+              
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(10);
+              doc.setTextColor(section.textColor[0], section.textColor[1], section.textColor[2]);
+              doc.text(`${section.title} (Continued)`, margin + 10, gridY + 7);
+              
+              gridY += 15;
+            }
+            
+            // Calculate cell position
+            const x = margin + (col * cellWidth);
+            const cellY = gridY + (Math.floor((index % (gridColumns * Math.floor((pageHeight - gridY - margin) / cellHeight)))) / gridColumns) * cellHeight;
+            
+            // Alternate background colors
+            if ((row + col) % 2 === 0) {
+              doc.setFillColor(240, 240, 240);
+            } else {
+              doc.setFillColor(250, 250, 250);
+            }
+            
+            // Draw cell
+            doc.rect(x, cellY, cellWidth, cellHeight, 'F');
+            
+            // Draw hall ticket
+            doc.setFont('helvetica', section.fontStyle);
+            doc.setFontSize(8);
+            doc.setTextColor(60, 60, 60);
+            doc.text(hallTicket, x + cellWidth/2, cellY + cellHeight/2, { align: 'center', baseline: 'middle' });
+          });
+          
+          // Calculate new y position
+          const rowsCount = Math.ceil(section.students.length / gridColumns);
+          y = gridY + (rowsCount * cellHeight) + 10;
+        });
+      });
+      
+      // Add footer on each page
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
@@ -406,13 +603,16 @@ const BeautifulPDFGenerator = ({ attendanceData, selectedRooms, stats }) => {
         );
       }
       
-      // Save the PDF
-      doc.save('SVIT_Exam_Attendance_Report.pdf');
+      // Save the PDF with a descriptive filename including date
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+      doc.save(`SVIT_Exam_Attendance_Report_${dateStr}.pdf`);
       
+      console.log('PDF generation completed successfully.');
       return true;
     } catch (error) {
       console.error('PDF generation error:', error);
-      alert('Error generating PDF: ' + error.message);
+      alert(`Error generating PDF: ${error.message}. Please try again or check your browser's console for details.`);
       return false;
     }
   };
